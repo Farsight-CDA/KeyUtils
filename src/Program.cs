@@ -20,8 +20,9 @@ try
     var app = host.Services.GetRequiredService<App>();
     exitCode = await app.RunAsync(args.Length == 0 ? ["-?"] : args);
 }
-catch(Exception)
+catch(Exception ex)
 {
+    Console.WriteLine($"Error during execution: {ex}");
     exitCode = -1;
 }
 

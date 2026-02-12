@@ -1,11 +1,10 @@
 using KeyUtils.Cli;
-using System.CommandLine;
 
 namespace KeyUtils;
 
 public sealed class App(CliRootCommand rootCommand)
 {
-    public const string NAME = "KeyDeriverCLI";
+    public const string NAME = "KeyUtils";
 
     private readonly CliRootCommand _rootCommand = rootCommand;
 

@@ -7,9 +7,18 @@ namespace KeyUtils.Cli.Derive;
 
 public class DeriveCommand : Command
 {
-    private readonly Option<FileInfo> _mnemonicFileOption = new("--mnemonic-file", "Path to the file containing the mnemonic");
-    private readonly Option<string> _pathOption = new("--path", "The BIP44 derivation path");
-    private readonly Option<FileInfo> _outputOption = new("--output", "Path to the file where the derived key will be saved");
+    private readonly Option<FileInfo> _mnemonicFileOption = new("--mnemonic-file", "mf")
+    {
+        Description = "Path to the file containing the mnemonic"
+    };
+    private readonly Option<string> _pathOption = new("--path")
+    {
+        Description = "The BIP44 derivation path"
+    };
+    private readonly Option<FileInfo> _outputOption = new("--output", "o")
+    {
+        Description = "Path to the file where the derived key will be saved"
+    };
 
     public DeriveCommand() : base("derive", "derive private keys from mnemonics")
     {
