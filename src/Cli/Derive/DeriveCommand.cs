@@ -7,17 +7,20 @@ namespace KeyUtils.Cli.Derive;
 
 public class DeriveCommand : Command
 {
-    private readonly Option<FileInfo> _mnemonicFileOption = new("--mnemonic-file", "mf")
+    private readonly Option<FileInfo> _mnemonicFileOption = new("--mnemonic-file", "-i")
     {
-        Description = "Path to the file containing the mnemonic"
+        Description = "Path to the file containing the mnemonic",
+        Required = true
     };
     private readonly Option<string> _pathOption = new("--path")
     {
-        Description = "The BIP44 derivation path"
+        Description = "The BIP44 derivation path",
+        Required = true
     };
-    private readonly Option<FileInfo> _outputOption = new("--output", "o")
+    private readonly Option<FileInfo> _outputOption = new("--output", "-o")
     {
-        Description = "Path to the file where the derived key will be saved"
+        Description = "Path to the file where the derived key will be saved",
+        Required = true
     };
 
     public DeriveCommand() : base("derive", "derive private keys from mnemonics")
@@ -31,27 +34,9 @@ public class DeriveCommand : Command
 
     private async Task<int> Handle(ParseResult parseResult)
     {
-        var mnemonicFile = parseResult.GetValue(_mnemonicFileOption);
-        string? path = parseResult.GetValue(_pathOption);
-        var outputFile = parseResult.GetValue(_outputOption);
-
-        if(mnemonicFile is null)
-        {
-            Console.WriteLine("Error: --mnemonic-file is required");
-            return 1;
-        }
-
-        if(path is null)
-        {
-            Console.WriteLine("Error: --path is required");
-            return 1;
-        }
-
-        if(outputFile is null)
-        {
-            Console.WriteLine("Error: --output is required");
-            return 1;
-        }
+        var mnemonicFile = parseResult.GetRequiredValue(_mnemonicFileOption);
+        string path = parseResult.GetRequiredValue(_pathOption);
+        var outputFile = parseResult.GetRequiredValue(_outputOption);
 
         if(!mnemonicFile.Exists)
         {
