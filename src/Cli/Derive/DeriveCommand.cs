@@ -12,11 +12,25 @@ public class DeriveCommand : Command
         Description = "Path to the file containing the mnemonic",
         Required = true
     };
-    private readonly Option<string> _pathOption = new("--path")
+
+    private readonly Option<string?> _pathOption = new("--path")
     {
         Description = "The BIP44 derivation path",
-        Required = true
+        Required = false
     };
+
+    private readonly Option<KeyType?> _typeOption = new("--type")
+    {
+        Description = "The key type (Cosmos, Ethereum, Solana)",
+        Required = false
+    };
+
+    private readonly Option<int> _indexOption = new("--index")
+    {
+        Description = "The account index (defaults to 0)",
+        Required = false
+    };
+
     private readonly Option<FileInfo> _outputOption = new("--output", "-o")
     {
         Description = "Path to the file where the derived key will be saved",
@@ -27,6 +41,8 @@ public class DeriveCommand : Command
     {
         Add(_mnemonicFileOption);
         Add(_pathOption);
+        Add(_typeOption);
+        Add(_indexOption);
         Add(_outputOption);
 
         SetAction(Handle);
@@ -34,9 +50,19 @@ public class DeriveCommand : Command
 
     private async Task<int> Handle(ParseResult parseResult)
     {
-        var mnemonicFile = parseResult.GetRequiredValue(_mnemonicFileOption);
-        string path = parseResult.GetRequiredValue(_pathOption);
-        var outputFile = parseResult.GetRequiredValue(_outputOption);
+        var mnemonicFile = parseResult.GetValue(_mnemonicFileOption)!;
+        string? path = parseResult.GetValue(_pathOption);
+        var type = parseResult.GetValue(_typeOption);
+        int index = parseResult.GetValue(_indexOption);
+        var outputFile = parseResult.GetValue(_outputOption)!;
+
+        if(String.IsNullOrWhiteSpace(path) == (type is null))
+        {
+            Console.WriteLine("Error: You must specify either --path OR --type, but not both.");
+            Console.WriteLine("Usage: derive -i <mnemonic> --type <type> [--index <index>] -o <output>");
+            Console.WriteLine("       derive -i <mnemonic> --path <path> -o <output>");
+            return 1;
+        }
 
         if(!mnemonicFile.Exists)
         {
@@ -44,9 +70,20 @@ public class DeriveCommand : Command
             return 1;
         }
 
+        if(type is not null)
+        {
+            path = type switch
+            {
+                KeyType.Cosmos => BIP44.Cosmos(index),
+                KeyType.Ethereum => BIP44.Ethereum((uint) index),
+                KeyType.Solana => BIP44.Solana(index),
+                _ => throw new NotImplementedException()
+            };
+        }
+
         string mnemonic = (await File.ReadAllTextAsync(mnemonicFile.FullName)).Trim();
         byte[] seed = BIP39.MnemonicToSeed(mnemonic);
-        uint[] pathIndexes = BIP44.Parse(path);
+        uint[] pathIndexes = BIP44.Parse(path!);
 
         var (privateKey, _) = Slip10.DerivePath(Secp256k1.Instance, seed, pathIndexes);
 
