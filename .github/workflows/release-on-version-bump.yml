@@ -1,0 +1,134 @@
+name: Release On Version Bump
+
+on:
+  push:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  PROJECT_PATH: src/KeyUtils.csproj
+
+jobs:
+  prepare:
+    if: github.ref_name == github.event.repository.default_branch
+    runs-on: ubuntu-latest
+    outputs:
+      assembly_name: ${{ steps.project.outputs.assembly_name }}
+      version: ${{ steps.project.outputs.version }}
+      tag: ${{ steps.project.outputs.tag }}
+      should_release: ${{ steps.tag_check.outputs.should_release }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Read project metadata
+        id: project
+        shell: bash
+        run: |
+          project_json="$(dotnet msbuild "$PROJECT_PATH" -nologo -getProperty:AssemblyName -getProperty:Version)"
+          assembly_name="$(printf '%s' "$project_json" | jq -r '.Properties.AssemblyName')"
+          version="$(printf '%s' "$project_json" | jq -r '.Properties.Version')"
+          tag="v$version"
+
+          echo "assembly_name=$assembly_name" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Check whether the tag already exists
+        id: tag_check
+        shell: bash
+        run: |
+          if git ls-remote --exit-code --tags origin "refs/tags/${{ steps.project.outputs.tag }}" >/dev/null 2>&1; then
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  build:
+    needs: prepare
+    if: needs.prepare.outputs.should_release == 'true'
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            rid: linux-x64
+            extension: ''
+          - os: windows-latest
+            rid: win-x64
+            extension: .exe
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Install Linux Native AOT prerequisites
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y clang zlib1g-dev
+
+      - name: Publish ${{ matrix.rid }} binary
+        run: dotnet publish ${{ env.PROJECT_PATH }} -c Release -r ${{ matrix.rid }} --self-contained true -o artifacts/publish/${{ matrix.rid }}
+
+      - name: Stage release asset
+        id: asset
+        shell: bash
+        run: |
+          source_name="${{ needs.prepare.outputs.assembly_name }}${{ matrix.extension }}"
+          asset_name="${{ needs.prepare.outputs.assembly_name }}-${{ needs.prepare.outputs.tag }}-${{ matrix.rid }}${{ matrix.extension }}"
+
+          mkdir -p artifacts/release
+          cp "artifacts/publish/${{ matrix.rid }}/${source_name}" "artifacts/release/${asset_name}"
+
+          echo "asset_name=$asset_name" >> "$GITHUB_OUTPUT"
+
+      - name: Upload release asset
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.rid }}
+          path: artifacts/release/${{ steps.asset.outputs.asset_name }}
+          if-no-files-found: error
+
+  release:
+    needs:
+      - prepare
+      - build
+    if: needs.prepare.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download release assets
+        uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: artifacts/release
+          merge-multiple: true
+
+      - name: Create tag and GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+        run: |
+          gh api "repos/${{ github.repository }}/git/refs" \
+            -f ref="refs/tags/$TAG" \
+            -f sha="${{ github.sha }}"
+
+          gh release create "$TAG" artifacts/release/* \
+            --repo "${{ github.repository }}" \
+            --title "$TAG" \
+            --generate-notes
