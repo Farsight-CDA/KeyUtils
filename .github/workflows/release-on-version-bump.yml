@@ -12,6 +12,10 @@ concurrency:
 
 env:
   PROJECT_PATH: src/KeyUtils.csproj
+  NPM_SCOPE: '@farsight-cda'
+  NPM_META_PACKAGE: '@farsight-cda/keyutils'
+  NPM_LINUX_PACKAGE: '@farsight-cda/keyutils-linux-x64'
+  NPM_WINDOWS_PACKAGE: '@farsight-cda/keyutils-win-x64'
 
 jobs:
   prepare:
@@ -88,10 +92,10 @@ jobs:
         include:
           - os: ubuntu-latest
             rid: linux-x64
-            extension: ''
+            archive_extension: .tar.gz
           - os: windows-latest
             rid: win-x64
-            extension: .exe
+            archive_extension: .zip
     steps:
       - name: Check out repository
         uses: actions/checkout@v5
@@ -108,16 +112,50 @@ jobs:
       - name: Publish ${{ matrix.rid }} binary
         run: dotnet publish ${{ env.PROJECT_PATH }} -c Release -r ${{ matrix.rid }} --self-contained true -o artifacts/publish/${{ matrix.rid }}
 
-      - name: Stage release asset
+      - name: Upload publish output for npm packaging
+        uses: actions/upload-artifact@v4
+        with:
+          name: publish-${{ matrix.rid }}
+          path: artifacts/publish/${{ matrix.rid }}
+
+      - name: Stage release bundle
         id: asset
         shell: bash
         run: |
-          source_name="${{ needs.prepare.outputs.assembly_name }}${{ matrix.extension }}"
-          asset_name="${{ needs.prepare.outputs.assembly_name }}-${{ needs.prepare.outputs.tag }}-${{ matrix.rid }}${{ matrix.extension }}"
+          bundle_name="${{ needs.prepare.outputs.assembly_name }}-${{ needs.prepare.outputs.tag }}-${{ matrix.rid }}"
+          bundle_dir="artifacts/bundle/${bundle_name}"
 
-          mkdir -p artifacts/release
-          cp "artifacts/publish/${{ matrix.rid }}/${source_name}" "artifacts/release/${asset_name}"
+          rm -rf "$bundle_dir"
+          mkdir -p "$bundle_dir" artifacts/release
+          cp -r artifacts/publish/${{ matrix.rid }}/. "$bundle_dir/"
 
+          echo "bundle_name=$bundle_name" >> "$GITHUB_OUTPUT"
+
+      - name: Archive Linux release bundle
+        if: runner.os == 'Linux'
+        id: archive_linux
+        shell: bash
+        run: |
+          asset_name="${{ steps.asset.outputs.bundle_name }}${{ matrix.archive_extension }}"
+          tar -C artifacts/bundle -czf "artifacts/release/${asset_name}" "${{ steps.asset.outputs.bundle_name }}"
+
+          echo "asset_name=$asset_name" >> "$GITHUB_OUTPUT"
+
+      - name: Archive Windows release bundle
+        if: runner.os == 'Windows'
+        id: archive_windows
+        shell: pwsh
+        run: |
+          $assetName = "${{ steps.asset.outputs.bundle_name }}${{ matrix.archive_extension }}"
+          Compress-Archive -Path "artifacts/bundle/${{ steps.asset.outputs.bundle_name }}" -DestinationPath "artifacts/release/$assetName" -Force
+
+          "asset_name=$assetName" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Resolve release asset name
+        id: archive
+        shell: bash
+        run: |
+          asset_name="${{ steps.archive_linux.outputs.asset_name || steps.archive_windows.outputs.asset_name }}"
           echo "asset_name=$asset_name" >> "$GITHUB_OUTPUT"
 
       - name: Upload asset to draft release
@@ -126,15 +164,86 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ needs.prepare.outputs.tag }}
         run: |
-          gh release upload "$TAG" "artifacts/release/${{ steps.asset.outputs.asset_name }}" \
+          gh release upload "$TAG" "artifacts/release/${{ steps.archive.outputs.asset_name }}" \
             --repo "${{ github.repository }}" \
             --clobber
+
+  publish_npm:
+    needs:
+      - prepare
+      - create_release
+      - build
+    if: needs.prepare.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - name: Download Linux publish output
+        uses: actions/download-artifact@v4
+        with:
+          name: publish-linux-x64
+          path: artifacts/publish/linux-x64
+
+      - name: Download Windows publish output
+        uses: actions/download-artifact@v4
+        with:
+          name: publish-win-x64
+          path: artifacts/publish/win-x64
+
+      - name: Prepare npm packages
+        env:
+          KEYUTILS_ASSEMBLY_NAME: ${{ needs.prepare.outputs.assembly_name }}
+        run: node scripts/prepare-npm-packages.mjs
+
+      - name: Publish Linux npm package
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+        shell: bash
+        run: |
+          if npm view "${{ env.NPM_LINUX_PACKAGE }}@$VERSION" version >/dev/null 2>&1; then
+            echo "${{ env.NPM_LINUX_PACKAGE }}@$VERSION already exists; skipping publish"
+          else
+            npm publish artifacts/npm/linux-x64 --access public
+          fi
+
+      - name: Publish Windows npm package
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+        shell: bash
+        run: |
+          if npm view "${{ env.NPM_WINDOWS_PACKAGE }}@$VERSION" version >/dev/null 2>&1; then
+            echo "${{ env.NPM_WINDOWS_PACKAGE }}@$VERSION already exists; skipping publish"
+          else
+            npm publish artifacts/npm/win-x64 --access public
+          fi
+
+      - name: Publish meta npm package
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+        shell: bash
+        run: |
+          if npm view "${{ env.NPM_META_PACKAGE }}@$VERSION" version >/dev/null 2>&1; then
+            echo "${{ env.NPM_META_PACKAGE }}@$VERSION already exists; skipping publish"
+          else
+            npm publish artifacts/npm/meta --access public
+          fi
 
   publish_release:
     needs:
       - prepare
       - create_release
       - build
+      - publish_npm
     if: needs.prepare.outputs.should_release == 'true'
     runs-on: ubuntu-latest
     steps:
@@ -152,6 +261,7 @@ jobs:
       - prepare
       - create_release
       - build
+      - publish_npm
     if: failure() && needs.prepare.outputs.should_release == 'true'
     runs-on: ubuntu-latest
     steps:
