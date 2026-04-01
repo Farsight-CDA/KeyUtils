@@ -22,10 +22,9 @@ public class DerivePathCommand : Command
         Required = true
     };
 
-    private readonly Option<FileInfo> _outputOption = new("--output", "-o")
+    private readonly Option<FileInfo?> _outputOption = new("--output", "-o")
     {
-        Description = "Path to the file where the derived key will be saved",
-        Required = true
+        Description = "Path to the file where the derived key will be saved"
     };
 
     public DerivePathCommand() : base("derive-path", "derive a key for an explicit path and curve")
@@ -43,7 +42,7 @@ public class DerivePathCommand : Command
         var mnemonicFile = parseResult.GetValue(_mnemonicFileOption)!;
         string path = parseResult.GetValue(_pathOption)!;
         var curve = DeriveKeySupport.GetCurve(parseResult.GetValue(_curveOption));
-        var outputFile = parseResult.GetValue(_outputOption)!;
+        var outputFile = parseResult.GetValue(_outputOption);
 
         return DeriveKeySupport.DeriveAsync(mnemonicFile, path, curve, outputFile);
     }

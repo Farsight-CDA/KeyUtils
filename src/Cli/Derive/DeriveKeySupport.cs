@@ -23,7 +23,7 @@ internal static class DeriveKeySupport
         _ => throw new NotImplementedException()
     };
 
-    public static async Task<int> DeriveAsync(FileInfo mnemonicFile, string path, ECCurve curve, FileInfo outputFile)
+    public static async Task<int> DeriveAsync(FileInfo mnemonicFile, string path, ECCurve curve, FileInfo? outputFile)
     {
         if(!mnemonicFile.Exists)
         {
@@ -37,8 +37,14 @@ internal static class DeriveKeySupport
         var (privateKey, _) = Slip10.DerivePath(curve, seed, pathIndexes);
 
         string privateKeyHex = Convert.ToHexStringLower(privateKey);
-        await File.WriteAllTextAsync(outputFile.FullName, privateKeyHex);
 
+        if(outputFile is null)
+        {
+            Console.WriteLine(privateKeyHex);
+            return 0;
+        }
+
+        await File.WriteAllTextAsync(outputFile.FullName, privateKeyHex);
         Console.WriteLine($"Successfully derived key and saved to {outputFile.FullName}");
         return 0;
     }

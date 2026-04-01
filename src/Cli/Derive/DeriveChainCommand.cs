@@ -22,10 +22,9 @@ public class DeriveChainCommand : Command
         DefaultValueFactory = _ => 0
     };
 
-    private readonly Option<FileInfo> _outputOption = new("--output", "-o")
+    private readonly Option<FileInfo?> _outputOption = new("--output", "-o")
     {
-        Description = "Path to the file where the derived key will be saved",
-        Required = true
+        Description = "Path to the file where the derived key will be saved"
     };
 
     public DeriveChainCommand() : base("derive-chain", "derive a key for a supported chain type")
@@ -43,7 +42,7 @@ public class DeriveChainCommand : Command
         var mnemonicFile = parseResult.GetValue(_mnemonicFileOption)!;
         var type = parseResult.GetValue(_typeOption);
         int accountIndex = parseResult.GetValue(_accountIndexOption);
-        var outputFile = parseResult.GetValue(_outputOption)!;
+        var outputFile = parseResult.GetValue(_outputOption);
 
         var (path, curve) = DeriveKeySupport.ResolveChain(type, accountIndex);
         return DeriveKeySupport.DeriveAsync(mnemonicFile, path, curve, outputFile);
