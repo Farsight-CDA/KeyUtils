@@ -24,12 +24,12 @@ jobs:
       should_release: ${{ steps.tag_check.outputs.should_release }}
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
       - name: Set up .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 10.0.x
 
@@ -56,8 +56,30 @@ jobs:
             echo "should_release=true" >> "$GITHUB_OUTPUT"
           fi
 
-  build:
+  create_release:
     needs: prepare
+    if: needs.prepare.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create tag and draft GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+        run: |
+          gh api "repos/${{ github.repository }}/git/refs" \
+            -f ref="refs/tags/$TAG" \
+            -f sha="${{ github.sha }}"
+
+          gh release create "$TAG" \
+            --repo "${{ github.repository }}" \
+            --title "$TAG" \
+            --generate-notes \
+            --draft
+
+  build:
+    needs:
+      - prepare
+      - create_release
     if: needs.prepare.outputs.should_release == 'true'
     runs-on: ${{ matrix.os }}
     strategy:
@@ -72,10 +94,10 @@ jobs:
             extension: .exe
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 10.0.x
 
@@ -98,37 +120,45 @@ jobs:
 
           echo "asset_name=$asset_name" >> "$GITHUB_OUTPUT"
 
-      - name: Upload release asset
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-${{ matrix.rid }}
-          path: artifacts/release/${{ steps.asset.outputs.asset_name }}
-          if-no-files-found: error
-
-  release:
-    needs:
-      - prepare
-      - build
-    if: needs.prepare.outputs.should_release == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Download release assets
-        uses: actions/download-artifact@v4
-        with:
-          pattern: release-*
-          path: artifacts/release
-          merge-multiple: true
-
-      - name: Create tag and GitHub release
+      - name: Upload asset to draft release
+        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ needs.prepare.outputs.tag }}
         run: |
-          gh api "repos/${{ github.repository }}/git/refs" \
-            -f ref="refs/tags/$TAG" \
-            -f sha="${{ github.sha }}"
-
-          gh release create "$TAG" artifacts/release/* \
+          gh release upload "$TAG" "artifacts/release/${{ steps.asset.outputs.asset_name }}" \
             --repo "${{ github.repository }}" \
-            --title "$TAG" \
-            --generate-notes
+            --clobber
+
+  publish_release:
+    needs:
+      - prepare
+      - create_release
+      - build
+    if: needs.prepare.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+        run: |
+          gh release edit "$TAG" \
+            --repo "${{ github.repository }}" \
+            --draft=false
+
+  cleanup_release:
+    needs:
+      - prepare
+      - create_release
+      - build
+    if: failure() && needs.prepare.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete failed draft release and tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+        run: |
+          gh release delete "$TAG" --repo "${{ github.repository }}" --yes || true
+          gh api -X DELETE "repos/${{ github.repository }}/git/refs/tags/$TAG" || true
