@@ -19,7 +19,7 @@ public class DeriveChainCommand : Command
     private readonly Option<int> _accountIndexOption = new("--account-index")
     {
         Description = "The account index to derive",
-        Required = true
+        DefaultValueFactory = _ => 0
     };
 
     private readonly Option<FileInfo> _outputOption = new("--output", "-o")

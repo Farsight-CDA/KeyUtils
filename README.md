@@ -27,11 +27,12 @@ dotnet publish -c Release
 keyutils derive-chain \
   --mnemonic-file mnemonic.txt \
   --type Evm \
-  --account-index 0 \
   --output key.txt
 ```
 
 Supported chain types: `Evm`, `Solana`, `Cosmos`
+
+`--account-index` is optional and defaults to `0`.
 
 ### Derive with custom path
 
