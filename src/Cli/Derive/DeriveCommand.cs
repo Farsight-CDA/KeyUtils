@@ -1,30 +1,42 @@
+using Keysmith.Net.BIP;
 using Keysmith.Net.EC;
 using Keysmith.Net.ED;
 using System.CommandLine;
 
 namespace KeyUtils.Cli.Derive;
 
-public sealed class DerivePathCommand : Command
+public sealed class DeriveCommand : Command
 {
-    public DerivePathCommand() : base("derive-path", "derive a key for an explicit path")
+    public DeriveCommand() : base("derive", "derive a key for a supported chain")
     {
-        Add(new DerivePathLeafCommand(
-            "ed25519",
-            "derive an Ed25519 key for an explicit path",
+        Add(new DeriveChainLeafCommand(
+            "solana",
+            "derive a Solana key",
+            BIP44.Solana,
             ED25519.Instance,
             [OutputFormat.Hex, OutputFormat.Base58, OutputFormat.Json],
+            OutputFormat.Base58));
+
+        Add(new DeriveChainLeafCommand(
+            "evm",
+            "derive an EVM key",
+            accountIndex => BIP44.Ethereum((uint) accountIndex),
+            Secp256k1.Instance,
+            [OutputFormat.Hex],
             OutputFormat.Hex));
 
-        Add(new DerivePathLeafCommand(
-            "secp256k1",
-            "derive a Secp256k1 key for an explicit path",
+        Add(new DeriveChainLeafCommand(
+            "cosmos",
+            "derive a Cosmos key",
+            BIP44.Cosmos,
             Secp256k1.Instance,
             [OutputFormat.Hex],
             OutputFormat.Hex));
     }
 
-    private sealed class DerivePathLeafCommand : Command
+    private sealed class DeriveChainLeafCommand : Command
     {
+        private readonly Func<int, string> _pathFactory;
         private readonly ECCurve _curve;
         private readonly OutputFormat[] _supportedFormats;
 
@@ -34,10 +46,10 @@ public sealed class DerivePathCommand : Command
             Required = true
         };
 
-        private readonly Option<string> _pathOption = new("--path")
+        private readonly Option<int> _accountIndexOption = new("--account-index")
         {
-            Description = "The BIP44 derivation path",
-            Required = true
+            Description = "The account index to derive",
+            DefaultValueFactory = _ => 0
         };
 
         private readonly Option<string> _formatOption;
@@ -47,13 +59,15 @@ public sealed class DerivePathCommand : Command
             Description = "Path to the file where the derived key will be saved"
         };
 
-        public DerivePathLeafCommand(
+        public DeriveChainLeafCommand(
             string name,
             string description,
+            Func<int, string> pathFactory,
             ECCurve curve,
             OutputFormat[] supportedFormats,
             OutputFormat defaultFormat) : base(name, description)
         {
+            _pathFactory = pathFactory;
             _curve = curve;
             _supportedFormats = supportedFormats;
             _formatOption = new Option<string>("--format", "-f")
@@ -64,7 +78,7 @@ public sealed class DerivePathCommand : Command
             _formatOption.AcceptOnlyFromAmong([.. supportedFormats.Select(format => format.ToCliValue())]);
 
             Add(_mnemonicFileOption);
-            Add(_pathOption);
+            Add(_accountIndexOption);
             Add(_formatOption);
             Add(_outputOption);
 
@@ -74,7 +88,7 @@ public sealed class DerivePathCommand : Command
         private Task<int> Handle(ParseResult parseResult)
         {
             var mnemonicFile = parseResult.GetValue(_mnemonicFileOption)!;
-            string path = parseResult.GetValue(_pathOption)!;
+            int accountIndex = parseResult.GetValue(_accountIndexOption);
             string formatText = parseResult.GetValue(_formatOption)!;
             var outputFile = parseResult.GetValue(_outputOption);
 
@@ -84,7 +98,7 @@ public sealed class DerivePathCommand : Command
                 return Task.FromResult(1);
             }
 
-            return DeriveKeySupport.DeriveAsync(mnemonicFile, path, _curve, format, outputFile);
+            return DeriveKeySupport.DeriveAsync(mnemonicFile, _pathFactory(accountIndex), _curve, format, outputFile);
         }
     }
 }

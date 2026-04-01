@@ -34,27 +34,41 @@ dotnet publish -c Release -r linux-x64 --self-contained true -o artifacts/publis
 ### Derive for a supported chain
 
 ```bash
-keyutils derive-chain \
+keyutils derive solana \
   --mnemonic-file mnemonic.txt \
-  --type Evm \
+  --format base58 \
   --output key.txt
 ```
 
-Supported chain types: `Evm`, `Solana`, `Cosmos`
+Supported chain commands: `solana`, `evm`, `cosmos`
 
 `--account-index` is optional and defaults to `0`.
+
+`derive solana` defaults to `--format base58`.
+
+`derive evm` and `derive cosmos` only support `--format hex`.
 
 ### Derive with custom path
 
 ```bash
-keyutils derive-path \
+keyutils derive-path ed25519 \
   --mnemonic-file mnemonic.txt \
-  --path "m/44'/60'/0'/0/0" \
-  --curve Secp256k1 \
+  --path "m/44'/501'/0'/0'/0'" \
+  --format hex \
   --output key.txt
 ```
 
-Supported curves: `Secp256k1`, `Ed25519`
+Supported path subcommands: `ed25519`, `secp256k1`
+
+`derive-path ed25519` supports `hex`, `base58`, and `json`.
+
+`derive-path secp256k1` only supports `hex`.
+
+Format meanings:
+
+- `hex`: raw 32-byte private key as lowercase hex
+- `base58`: Ed25519 64-byte keypair encoded for Solana/Rust `Keypair::from_base58_string(...)`
+- `json`: Ed25519 64-byte keypair as a JSON byte array
 
 ## How It Works
 

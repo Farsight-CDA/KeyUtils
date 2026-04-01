@@ -1,13 +1,13 @@
-﻿using KeyUtils.Cli.Derive;
+using KeyUtils.Cli.Derive;
 using System.CommandLine;
 
 namespace KeyUtils.Cli;
 
 public class CliRootCommand : RootCommand
 {
-    public CliRootCommand(DeriveChainCommand deriveChainCommand, DerivePathCommand derivePathCommand) : base()
+    public CliRootCommand(DeriveCommand deriveCommand, DerivePathCommand derivePathCommand) : base()
     {
-        Add(deriveChainCommand);
+        Add(deriveCommand);
         Add(derivePathCommand);
     }
 }
