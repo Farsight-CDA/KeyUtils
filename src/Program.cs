@@ -11,7 +11,8 @@ var host = Host.CreateDefaultBuilder(args)
     {
         services.AddSingleton<App>();
         services.AddTransient<CliRootCommand>();
-        services.AddTransient<DeriveCommand>();
+        services.AddTransient<DeriveChainCommand>();
+        services.AddTransient<DerivePathCommand>();
     })
     .Build();
 

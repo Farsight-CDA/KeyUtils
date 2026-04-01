@@ -5,8 +5,9 @@ namespace KeyUtils.Cli;
 
 public class CliRootCommand : RootCommand
 {
-    public CliRootCommand(DeriveCommand deriveCommand) : base()
+    public CliRootCommand(DeriveChainCommand deriveChainCommand, DerivePathCommand derivePathCommand) : base()
     {
-        Add(deriveCommand);
+        Add(deriveChainCommand);
+        Add(derivePathCommand);
     }
 }
