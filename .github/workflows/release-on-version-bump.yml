@@ -113,7 +113,7 @@ jobs:
         run: dotnet publish ${{ env.PROJECT_PATH }} -c Release -r ${{ matrix.rid }} --self-contained true -o artifacts/publish/${{ matrix.rid }}
 
       - name: Upload publish output for npm packaging
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: publish-${{ matrix.rid }}
           path: artifacts/publish/${{ matrix.rid }}
@@ -180,19 +180,19 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: 22
           registry-url: https://registry.npmjs.org
 
       - name: Download Linux publish output
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: publish-linux-x64
           path: artifacts/publish/linux-x64
 
       - name: Download Windows publish output
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: publish-win-x64
           path: artifacts/publish/win-x64
